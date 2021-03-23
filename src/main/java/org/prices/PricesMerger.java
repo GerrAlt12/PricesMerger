@@ -88,22 +88,38 @@ public class PricesMerger {
             if (existedPrice.getValidFrom().compareTo(newPrice.getValidFrom()) < 1) { //Новая цена начинается не раньше старой - т.е. остальные элементы можно будет не смотреть (начало больше конца, упорядочено по убыванию конца, два одновременно не могут действовать)
                 Long idForOlderSlice = null; //id оставляем за самым ранним слайсом, если разрезаем на несколько
                 Instant oldInvalidSince = existedPrice.getInvalidSince();
-                if (existedPrice.getValidFrom().compareTo(newPrice.getValidFrom()) < 0) {
+                if (existedPrice.getValidFrom().compareTo(newPrice.getValidFrom()) < 0) { //часть времени действует старая цена, ДО того как начинает действовать новая
                     oldInvalidSince = existedPrice.getInvalidSince();
-                    existedPrice.setInvalidSince(newPrice.getValidFrom()); //часть времени действует старая цена, ДО того как начинает действовать новая
-                    correctedElements.add(existedPrice);
+                    if (existedPrice.getAmount().equals(newPrice.getAmount())) { //цена одинаковая, соединяем
+                        newPrice.setValidFrom(existedPrice.getValidFrom());
+                    } else {
+                        existedPrice.setInvalidSince(newPrice.getValidFrom()); //цена разная - вычитаем
+                        if (existedPrice.getValidFrom().compareTo(existedPrice.getInvalidSince()) < 0) { //добавляем обратно только если начало все еще раньше конца
+                            correctedElements.add(existedPrice);
+                        }
+                    }
                 } else {
                     idForOlderSlice = existedPrice.getId();
                 }
                 if (oldInvalidSince.compareTo(newPrice.getInvalidSince()) > 0) {//часть времени действует старая цена, ПОСЛЕ того как начинает действовать новая
-                    correctedElements.add(new PriceSlice(idForOlderSlice, newPrice.getInvalidSince(), oldInvalidSince, existedPrice.getAmount()));
+                    if (existedPrice.getAmount().equals(newPrice.getAmount())) { //цена одинаковая, соединяем
+                        newPrice.setInvalidSince(oldInvalidSince);
+                    } else {
+                        correctedElements.add(new PriceSlice(idForOlderSlice, newPrice.getInvalidSince(), oldInvalidSince, existedPrice.getAmount())); //цена разная - вычитаем
+                    }
                 }
                 //т.к. начало цены больше конца, упорядочено по убыванию окончания, и одновременно два слайса не могут быть действующими значит дальше если что-то и есть то оно точно не пересекается
-
                 break;
             }
-            //часть времени действует старая цена после новой - отрезаем кусок от старой и идем дальше
-            existedPrice.setValidFrom(newPrice.getInvalidSince());
+            //часть времени действует старая цена после новой - отрезаем или соединяем
+            if (existedPrice.getAmount().equals(newPrice.getAmount())) {
+                newPrice.setInvalidSince(existedPrice.getInvalidSince());
+            } else {
+                existedPrice.setValidFrom(newPrice.getInvalidSince());
+                if (existedPrice.getValidFrom().compareTo(existedPrice.getInvalidSince()) < 0) { //добавляем обратно только если начало все еще раньше конца
+                    correctedElements.add(existedPrice);
+                }
+            }
         }
 
         correctedElements.add(newPrice);
